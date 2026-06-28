@@ -396,9 +396,9 @@
 
 <script>
 // ====== STATE ======
-let entries = JSON.parse(localStorage.getItem('kiroku-entries') || '[]');
+let entries = [];
 let currentPhotos = [];
-let selectedMoods = []; // 複数選択
+let selectedMoods = [];
 let analyzing = false;
 let editingId = null;
 let editingMoods = [];
@@ -408,6 +408,46 @@ const MOODS_LIST = [
   '😲 びっくり','😅 あせり','😔 つらい','😢 悲しい','😤 もやもや',
   '😡 怒り','😰 不安','😴 眠い','😩 ぐったり','🤒 体調不良'
 ];
+
+// ====== INDEXEDDB ======
+let db;
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('kiroku-db', 1);
+    req.onupgradeneeded = e => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('entries')) {
+        d.createObjectStore('entries', { keyPath: 'id' });
+      }
+    };
+    req.onsuccess = e => { db = e.target.result; resolve(db); };
+    req.onerror = () => reject(req.error);
+  });
+}
+function dbGetAll() {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('entries', 'readonly');
+    const req = tx.objectStore('entries').getAll();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+function dbPut(entry) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('entries', 'readwrite');
+    const req = tx.objectStore('entries').put(entry);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+function dbDelete(id) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('entries', 'readwrite');
+    const req = tx.objectStore('entries').delete(id);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
 
 // ====== INIT ======
 function toDatetimeLocal(d) {
@@ -424,10 +464,25 @@ function updateDateDisplay() {
   if (!val) { document.getElementById('date-display').textContent = ''; return; }
   document.getElementById('date-display').textContent = formatDate(new Date(val));
 }
-setNow();
-document.getElementById('entry-datetime').addEventListener('change', updateDateDisplay);
-renderList();
-renderCharts();
+
+openDB().then(async () => {
+  // localStorageから移行（旧データがあれば）
+  const old = localStorage.getItem('kiroku-entries');
+  if (old) {
+    const oldEntries = JSON.parse(old);
+    for (const e of oldEntries) await dbPut(e);
+    localStorage.removeItem('kiroku-entries');
+  }
+  entries = await dbGetAll();
+  entries.sort((a,b) => new Date(b.date) - new Date(a.date));
+  setNow();
+  document.getElementById('entry-datetime').addEventListener('change', updateDateDisplay);
+  renderList();
+  renderCharts();
+}).catch(err => {
+  console.error('DB error:', err);
+  showToast('データベースの初期化に失敗しました', 'error');
+});
 
 // ====== NAV ======
 function switchView(name, btn) {
@@ -539,46 +594,43 @@ function showToast(msg, type = 'success') {
 }
 
 // ====== SAVE ======
-function saveEntry() {
+async function saveEntry() {
   const text = document.getElementById('diary-text').value.trim();
   if (!text && currentPhotos.length === 0) {
     showToast('日記を書くか写真を追加してください', 'error');
     return;
   }
-  // 二度押し防止
   const btn = document.getElementById('btn-save');
   btn.disabled = true;
   btn.textContent = '保存中...';
-
-  const datetimeVal = document.getElementById('entry-datetime').value;
-  const entryDate = datetimeVal ? new Date(datetimeVal).toISOString() : new Date().toISOString();
-  const entry = {
-    id: Date.now(),
-    date: entryDate,
-    text,
-    moods: [...selectedMoods],
-    photos: currentPhotos.map(p => p.dataUrl),
-    analysis: window._lastAnalysis || null
-  };
-  entries.unshift(entry);
-  save();
-
-  // フォームリセット
-  document.getElementById('diary-text').value = '';
-  currentPhotos = []; renderPreviews();
-  resetMoods();
-  document.getElementById('ai-result').classList.remove('show');
-  window._lastAnalysis = null;
-  setNow();
-
-  // ボタン復元 & トースト表示
+  try {
+    const datetimeVal = document.getElementById('entry-datetime').value;
+    const entryDate = datetimeVal ? new Date(datetimeVal).toISOString() : new Date().toISOString();
+    const entry = {
+      id: Date.now(),
+      date: entryDate,
+      text,
+      moods: [...selectedMoods],
+      photos: currentPhotos.map(p => p.dataUrl),
+      analysis: window._lastAnalysis || null
+    };
+    await dbPut(entry);
+    entries.unshift(entry);
+    // フォームリセット
+    document.getElementById('diary-text').value = '';
+    currentPhotos = []; renderPreviews();
+    resetMoods();
+    document.getElementById('ai-result').classList.remove('show');
+    window._lastAnalysis = null;
+    setNow();
+    showToast('✓ 保存しました！');
+    renderList();
+  } catch(err) {
+    showToast('保存に失敗しました: ' + err.message, 'error');
+  }
   btn.disabled = false;
   btn.textContent = '保存する';
-  showToast('✓ 保存しました！');
-  renderList();
 }
-
-function save() { localStorage.setItem('kiroku-entries', JSON.stringify(entries)); }
 
 // ====== MARKDOWN DOWNLOAD ======
 function entriesToMarkdown(list) {
@@ -675,11 +727,16 @@ function emotionColor(name) {
 }
 
 // ====== DELETE ======
-function deleteEntry(id) {
+async function deleteEntry(id) {
   if (!confirm('この記録を削除しますか？')) return;
-  entries = entries.filter(e => e.id !== id);
-  save();
-  renderList();
+  try {
+    await dbDelete(id);
+    entries = entries.filter(e => e.id !== id);
+    showToast('削除しました');
+    renderList();
+  } catch(err) {
+    showToast('削除に失敗しました', 'error');
+  }
 }
 
 // ====== EDIT ======
@@ -697,14 +754,19 @@ function openEdit(id) {
   });
   document.getElementById('modal-edit').classList.add('show');
 }
-function updateEntry() {
+async function updateEntry() {
   const idx = entries.findIndex(e => e.id === editingId);
   if (idx === -1) return;
   const datetimeVal = document.getElementById('edit-datetime').value;
   entries[idx].date = datetimeVal ? new Date(datetimeVal).toISOString() : entries[idx].date;
   entries[idx].text = document.getElementById('edit-text').value.trim();
   entries[idx].moods = [...editingMoods];
-  save();
+  try {
+    await dbPut(entries[idx]);
+    showToast('✓ 更新しました！');
+  } catch(err) {
+    showToast('更新に失敗しました', 'error');
+  }
   closeModal('modal-edit');
   renderList();
 }
