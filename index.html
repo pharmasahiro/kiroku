@@ -81,7 +81,38 @@
   .save-zone { padding: 16px 20px; border-top: 1px solid var(--border); display: flex; gap: 10px; }
   .btn-save { flex: 1; background: var(--ink); color: #fff; border: none; border-radius: 10px; padding: 13px; font-size: 15px; font-family: 'Noto Sans JP', sans-serif; cursor: pointer; transition: background 0.2s; }
   .btn-save:hover { background: var(--accent); }
+  .btn-save:disabled { background: #aaa; cursor: not-allowed; }
   .btn-analyze { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent); border-radius: 10px; padding: 13px 18px; font-size: 14px; font-family: 'Noto Sans JP', sans-serif; cursor: pointer; white-space: nowrap; }
+
+  /* TOAST */
+  .save-toast {
+    margin: 0 20px;
+    border-radius: 10px;
+    padding: 0;
+    font-size: 14px;
+    font-family: 'Noto Sans JP', sans-serif;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
+    opacity: 0;
+    text-align: center;
+  }
+  .save-toast.show-success {
+    background: #edfaf3;
+    color: #2d7a50;
+    border: 1px solid #a8dfc0;
+    padding: 12px 16px;
+    max-height: 60px;
+    opacity: 1;
+  }
+  .save-toast.show-error {
+    background: #fef0f0;
+    color: var(--negative);
+    border: 1px solid #f0c0c0;
+    padding: 12px 16px;
+    max-height: 60px;
+    opacity: 1;
+  }
 
   /* AI RESULT */
   .ai-result { background: var(--accent-soft); border-radius: 12px; padding: 16px 20px; margin: 16px 20px; display: none; }
@@ -218,9 +249,10 @@
         <div id="ai-content"></div>
       </div>
 
+      <div id="save-toast" class="save-toast"></div>
       <div class="save-zone">
         <button class="btn-analyze" onclick="analyzeEmotion()">AI分析</button>
-        <button class="btn-save" onclick="saveEntry()">保存する</button>
+        <button class="btn-save" id="btn-save" onclick="saveEntry()">保存する</button>
       </div>
     </div>
   </div>
@@ -440,10 +472,26 @@ async function analyzeEmotion() {
   analyzing = false;
 }
 
+// ====== TOAST ======
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('save-toast');
+  t.textContent = msg;
+  t.className = 'save-toast show-' + type;
+  setTimeout(() => { t.className = 'save-toast'; }, 2500);
+}
+
 // ====== SAVE ======
 function saveEntry() {
   const text = document.getElementById('diary-text').value.trim();
-  if (!text && currentPhotos.length === 0) { alert('日記を書くか写真を追加してください'); return; }
+  if (!text && currentPhotos.length === 0) {
+    showToast('日記を書くか写真を追加してください', 'error');
+    return;
+  }
+  // 二度押し防止
+  const btn = document.getElementById('btn-save');
+  btn.disabled = true;
+  btn.textContent = '保存中...';
+
   const datetimeVal = document.getElementById('entry-datetime').value;
   const entryDate = datetimeVal ? new Date(datetimeVal).toISOString() : new Date().toISOString();
   const entry = {
@@ -456,14 +504,19 @@ function saveEntry() {
   };
   entries.unshift(entry);
   save();
-  // Reset
+
+  // フォームリセット
   document.getElementById('diary-text').value = '';
   currentPhotos = []; renderPreviews();
   resetMoods();
   document.getElementById('ai-result').classList.remove('show');
   window._lastAnalysis = null;
   setNow();
-  alert('保存しました ✓');
+
+  // ボタン復元 & トースト表示
+  btn.disabled = false;
+  btn.textContent = '保存する';
+  showToast('✓ 保存しました！');
   renderList();
 }
 
