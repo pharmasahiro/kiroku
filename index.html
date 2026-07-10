@@ -308,11 +308,11 @@
   <!-- CHART VIEW -->
   <div class="view" id="view-chart">
     <div class="chart-section">
-      <div class="chart-title">感情スコアの推移</div>
+      <div class="chart-title">ポジティブ度の推移</div>
       <canvas id="emotion-chart" height="220"></canvas>
     </div>
     <div class="chart-section">
-      <div class="chart-title">感情の内訳（平均）</div>
+      <div class="chart-title">気分の記録ランキング</div>
       <canvas id="emotion-radar" height="220"></canvas>
     </div>
   </div>
@@ -728,57 +728,120 @@ function openDetail(id) {
 }
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 
+// ====== MOOD SCORE MAP ======
+// 絵文字ごとのポジティブ度スコア（0〜100）
+const MOOD_SCORES = {
+  '😊 うれしい': 85, '😆 最高！': 100, '🥰 幸せ': 90, '😌 穏やか': 70,
+  '😐 ふつう': 50, '🤔 考え中': 50, '😲 びっくり': 55, '😅 あせり': 35,
+  '😔 つらい': 20, '😢 悲しい': 15, '😤 もやもや': 25, '😡 怒り': 10,
+  '😰 不安': 20, '😴 眠い': 40, '😩 ぐったり': 25, '🤒 体調不良': 15
+};
+function moodScore(entry) {
+  const moods = Array.isArray(entry.moods) ? entry.moods : (entry.mood ? [entry.mood] : []);
+  if (!moods.length) return null;
+  return Math.round(moods.reduce((s, m) => s + (MOOD_SCORES[m] || 50), 0) / moods.length);
+}
+
 // ====== CHARTS ======
-function renderCharts() { renderLineChart(); renderRadarChart(); }
+function renderCharts() { renderLineChart(); renderBarChart(); }
 
 function renderLineChart() {
   const canvas = document.getElementById('emotion-chart');
   const ctx = canvas.getContext('2d');
   canvas.width = canvas.offsetWidth; canvas.height = 220;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  const analyzed = entries.filter(e => e.analysis).slice(0, 14).reverse();
-  if (analyzed.length < 2) {
+
+  const scored = [...entries].reverse().filter(e => moodScore(e) !== null).slice(0, 14);
+  if (scored.length < 2) {
     ctx.fillStyle = '#aaa'; ctx.font = '13px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText('記録が2件以上になるとグラフが表示されます', canvas.width/2, 110); return;
+    ctx.fillText('気分を選択した記録が2件以上になるとグラフが表示されます', canvas.width/2, 110); return;
   }
-  const W = canvas.width - 40, H = canvas.height - 40, L = 30, T = 10;
-  const vals = analyzed.map(e => e.analysis.overall);
+  const W = canvas.width - 44, H = canvas.height - 40, L = 34, T = 10;
+  const vals = scored.map(e => moodScore(e));
+
+  // グリッド
   ctx.strokeStyle = '#eee'; ctx.lineWidth = 1;
-  [0,25,50,75,100].forEach(v => {
-    const y = T + H - (v/100*H);
-    ctx.beginPath(); ctx.moveTo(L,y); ctx.lineTo(L+W,y); ctx.stroke();
-    ctx.fillStyle='#aaa'; ctx.font='10px sans-serif'; ctx.textAlign='right';
-    ctx.fillText(v, L-4, y+4);
+  [0, 25, 50, 75, 100].forEach(v => {
+    const y = T + H - (v / 100 * H);
+    ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(L + W, y); ctx.stroke();
+    ctx.fillStyle = '#bbb'; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText(v, L - 4, y + 3);
   });
-  const step = W/(vals.length-1);
-  ctx.beginPath(); ctx.strokeStyle='#7c6fcd'; ctx.lineWidth=2.5;
-  vals.forEach((v,i)=>{ const x=L+i*step,y=T+H-(v/100*H); i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
-  ctx.stroke();
+
+  const step = W / (vals.length - 1);
+
+  // 塗りつぶし
   ctx.beginPath();
-  vals.forEach((v,i)=>{ const x=L+i*step,y=T+H-(v/100*H); i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
-  ctx.lineTo(L+(vals.length-1)*step,T+H); ctx.lineTo(L,T+H); ctx.closePath();
-  ctx.fillStyle='rgba(124,111,205,0.1)'; ctx.fill();
-  vals.forEach((v,i)=>{ const x=L+i*step,y=T+H-(v/100*H); ctx.beginPath(); ctx.arc(x,y,4,0,Math.PI*2); ctx.fillStyle='#7c6fcd'; ctx.fill(); });
-  analyzed.forEach((e,i)=>{ const x=L+i*step,d=new Date(e.date); ctx.fillStyle='#aaa'; ctx.font='10px sans-serif'; ctx.textAlign='center'; ctx.fillText(`${d.getMonth()+1}/${d.getDate()}`,x,T+H+18); });
+  vals.forEach((v, i) => { const x = L + i * step, y = T + H - (v / 100 * H); i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); });
+  ctx.lineTo(L + (vals.length - 1) * step, T + H); ctx.lineTo(L, T + H); ctx.closePath();
+  ctx.fillStyle = 'rgba(124,111,205,0.12)'; ctx.fill();
+
+  // 折れ線
+  ctx.beginPath(); ctx.strokeStyle = '#7c6fcd'; ctx.lineWidth = 2.5; ctx.lineJoin = 'round';
+  vals.forEach((v, i) => { const x = L + i * step, y = T + H - (v / 100 * H); i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); });
+  ctx.stroke();
+
+  // ドットと日付
+  vals.forEach((v, i) => {
+    const x = L + i * step, y = T + H - (v / 100 * H);
+    ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = '#7c6fcd'; ctx.fill();
+    const d = new Date(scored[i].date);
+    ctx.fillStyle = '#aaa'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(`${d.getMonth()+1}/${d.getDate()}`, x, T + H + 16);
+  });
 }
 
-function renderRadarChart() {
+function renderBarChart() {
   const canvas = document.getElementById('emotion-radar');
   const ctx = canvas.getContext('2d');
   canvas.width = canvas.offsetWidth; canvas.height = 220;
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  const analyzed = entries.filter(e => e.analysis);
-  if (!analyzed.length) { ctx.fillStyle='#aaa'; ctx.font='14px sans-serif'; ctx.textAlign='center'; ctx.fillText('記録がありません',canvas.width/2,110); return; }
-  const labels=['喜び','安心','不安','怒り','疲労'];
-  const avgs=labels.map(l=>analyzed.reduce((s,e)=>s+(e.analysis.scores[l]||0),0)/analyzed.length);
-  const cx=canvas.width/2,cy=canvas.height/2,R=Math.min(cx,cy)-40,n=labels.length;
-  const colors=['#5a9e78','#7c6fcd','#e09c4a','#c9605a','#8a9ab5'];
-  [0.25,0.5,0.75,1].forEach(r=>{ ctx.beginPath(); for(let i=0;i<n;i++){const a=(i/n)*Math.PI*2-Math.PI/2,x=cx+Math.cos(a)*R*r,y=cy+Math.sin(a)*R*r;i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);} ctx.closePath(); ctx.strokeStyle='#eee'; ctx.lineWidth=1; ctx.stroke(); });
-  for(let i=0;i<n;i++){const a=(i/n)*Math.PI*2-Math.PI/2;ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(a)*R,cy+Math.sin(a)*R);ctx.strokeStyle='#eee';ctx.stroke();}
-  ctx.beginPath();
-  avgs.forEach((v,i)=>{const a=(i/n)*Math.PI*2-Math.PI/2,r=(v/100)*R,x=cx+Math.cos(a)*r,y=cy+Math.sin(a)*r;i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});
-  ctx.closePath();ctx.fillStyle='rgba(124,111,205,0.2)';ctx.fill();ctx.strokeStyle='#7c6fcd';ctx.lineWidth=2;ctx.stroke();
-  labels.forEach((label,i)=>{const a=(i/n)*Math.PI*2-Math.PI/2,x=cx+Math.cos(a)*(R+22),y=cy+Math.sin(a)*(R+22);ctx.fillStyle=colors[i];ctx.font='bold 12px Noto Sans JP,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(label,x,y);});
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // 全記録から気分を集計
+  const counts = {};
+  entries.forEach(e => {
+    const moods = Array.isArray(e.moods) ? e.moods : (e.mood ? [e.mood] : []);
+    moods.forEach(m => { counts[m] = (counts[m] || 0) + 1; });
+  });
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 7);
+
+  if (!sorted.length) {
+    ctx.fillStyle = '#aaa'; ctx.font = '14px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('記録がありません', canvas.width / 2, 110); return;
+  }
+
+  const maxVal = sorted[0][1];
+  const barH = 24, gap = 8, L = 56, T = 10;
+  const W = canvas.width - L - 16;
+
+  sorted.forEach(([mood, count], i) => {
+    const y = T + i * (barH + gap);
+    const emoji = mood.split(' ')[0];
+    const label = mood.split(' ')[1] || '';
+    const score = MOOD_SCORES[mood] || 50;
+    // ポジティブ度で色を変える
+    const hue = Math.round(score * 1.2); // 0(赤)〜100(緑)
+    const color = `hsl(${hue}, 60%, 55%)`;
+
+    // ラベル（絵文字＋テキスト）
+    ctx.font = '14px sans-serif'; ctx.textAlign = 'right'; ctx.fillStyle = '#555';
+    ctx.fillText(emoji, L - 24, y + barH - 6);
+    ctx.font = '10px Noto Sans JP, sans-serif'; ctx.fillStyle = '#888';
+    ctx.fillText(label, L - 4, y + barH - 6);
+
+    // バー
+    const barW = Math.round((count / maxVal) * W);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(L, y, barW, barH, 4) : ctx.rect(L, y, barW, barH);
+    ctx.fill();
+
+    // カウント
+    ctx.font = 'bold 11px sans-serif'; ctx.fillStyle = '#fff'; ctx.textAlign = 'left';
+    if (barW > 24) ctx.fillText(count + '回', L + 6, y + barH - 7);
+    else { ctx.fillStyle = '#888'; ctx.fillText(count + '回', L + barW + 4, y + barH - 7); }
+  });
 }
 
 // ====== UTILS ======
