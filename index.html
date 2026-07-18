@@ -83,6 +83,47 @@
   .btn-save:hover { background: var(--accent); }
   .btn-save:disabled { background: #aaa; cursor: not-allowed; }
 
+  /* INTROSPECT */
+  .introspect-zone {
+    padding: 14px 20px;
+    border-top: 1px solid var(--border);
+  }
+  .introspect-label {
+    font-size: 13px;
+    color: var(--ink);
+    font-weight: 500;
+    margin-bottom: 8px;
+  }
+  .introspect-optional {
+    font-size: 11px;
+    color: var(--ink-light);
+    font-weight: 400;
+    margin-left: 6px;
+  }
+  .introspect-textarea {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: 'Noto Sans JP', sans-serif;
+    color: var(--ink);
+    background: var(--paper-warm);
+    resize: none;
+    outline: none;
+    min-height: 72px;
+    line-height: 1.7;
+    transition: border-color 0.2s;
+  }
+  .introspect-textarea:focus {
+    border-color: var(--accent);
+    background: #fff;
+  }
+  .introspect-textarea::placeholder {
+    color: #bbb;
+    font-size: 13px;
+  }
+
   /* TOAST */
   .save-toast {
     margin: 0 20px;
@@ -181,6 +222,17 @@
   }
   .dl-date:focus { border-color: var(--accent); }
   .dl-sep { font-size: 13px; color: var(--ink-light); }
+
+  .entry-item-introspect {
+    padding: 0 18px 12px;
+    font-size: 13px;
+    color: var(--accent);
+    line-height: 1.6;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
 
   /* 編集・削除ボタン */
   .entry-item-actions { padding: 10px 18px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
@@ -282,6 +334,12 @@
         <div class="mood-selected-display" id="mood-selected-display"></div>
       </div>
 
+      <div class="introspect-zone">
+        <div class="introspect-label">💭 なぜそう感じた？<span class="introspect-optional">（任意）</span></div>
+        <textarea id="introspect-text" class="introspect-textarea"
+          placeholder="例：「上司の一言が引っかかった」「思ったより仕事がうまくいった」「なんとなくそんな気がする」"></textarea>
+      </div>
+
       <div id="save-toast" class="save-toast"></div>
       <div class="save-zone">
         <button class="btn-save" id="btn-save" onclick="saveEntry()">保存する</button>
@@ -349,6 +407,11 @@
       <div class="edit-field">
         <label class="edit-label">テキスト</label>
         <textarea id="edit-text" class="edit-textarea"></textarea>
+      </div>
+      <div class="edit-field">
+        <label class="edit-label">💭 なぜそう感じた？（任意）</label>
+        <textarea id="edit-introspect" class="introspect-textarea" style="min-height:60px"
+          placeholder="例：「上司の一言が引っかかった」「思ったより仕事がうまくいった」"></textarea>
       </div>
       <div class="edit-field">
         <label class="edit-label">気分（複数選択OK）</label>
@@ -585,6 +648,7 @@ function entriesToMarkdown(list) {
     if (moods.length > 0) lines.push(`**気分:** ${moods.join('  ')}`);
     lines.push('');
     if (e.text) lines.push(e.text);
+    if (e.introspect) { lines.push(''); lines.push(`> 💭 ${e.introspect}`); }
     if (e.analysis) {
       lines.push('');
       lines.push('**AI感情分析:**');
@@ -656,6 +720,7 @@ function renderList() {
         </div>
         ${photosHtml}
         ${e.text ? `<div class="entry-item-text" onclick="openDetail(${e.id})" style="cursor:pointer">${e.text}</div>` : ''}
+        ${e.introspect ? `<div class="entry-item-introspect" onclick="openDetail(${e.id})" style="cursor:pointer">💭 ${e.introspect}</div>` : ''}
         ${scoreHtml ? `<div class="entry-item-scores">${scoreHtml}</div>` : ''}
         <div class="entry-item-actions">
           <button class="btn-edit" onclick="openEdit(${e.id})">✏️ 編集</button>
@@ -690,6 +755,7 @@ function openEdit(id) {
   editingMoods = Array.isArray(e.moods) ? [...e.moods] : (e.mood ? [e.mood] : []);
   document.getElementById('edit-datetime').value = toDatetimeLocal(new Date(e.date));
   document.getElementById('edit-text').value = e.text || '';
+  document.getElementById('edit-introspect').value = e.introspect || '';
   // 気分ボタンの状態を反映
   document.querySelectorAll('#edit-mood-buttons .mood-btn').forEach(btn => {
     const mood = btn.getAttribute('onclick').match(/'([^']+)'/)[1];
@@ -703,6 +769,7 @@ async function updateEntry() {
   const datetimeVal = document.getElementById('edit-datetime').value;
   entries[idx].date = datetimeVal ? new Date(datetimeVal).toISOString() : entries[idx].date;
   entries[idx].text = document.getElementById('edit-text').value.trim();
+  entries[idx].introspect = document.getElementById('edit-introspect').value.trim();
   entries[idx].moods = [...editingMoods];
   try {
     await dbPut(entries[idx]);
@@ -722,8 +789,10 @@ function openDetail(id) {
   document.getElementById('modal-date').textContent = formatDate(new Date(e.date)) + (moods.length > 0 ? '　' + moods.map(m => m.split(' ')[0]).join(' ') : '');
   document.getElementById('modal-photos').innerHTML = (e.photos || []).map(p => `<img src="${p}">`).join('');
   document.getElementById('modal-text').textContent = e.text || '';
-  document.getElementById('modal-scores').innerHTML = e.analysis
-    ? `<div style="font-size:13px;color:#666;line-height:1.7;margin-top:12px;padding-top:12px;border-top:1px solid #eee">${e.analysis.summary}</div>` : '';
+  const introspectHtml = e.introspect
+    ? `<div style="font-size:14px;color:#555;line-height:1.7;margin-bottom:12px;padding:10px 12px;background:#f8f6f0;border-radius:8px;border-left:3px solid #7c6fcd">💭 ${e.introspect}</div>`
+    : '';
+  document.getElementById('modal-scores').innerHTML = introspectHtml;
   document.getElementById('modal-detail').classList.add('show');
 }
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
