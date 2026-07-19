@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <link rel="apple-touch-icon" href="icon.jpg">
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="apple-touch-icon" href="icon.jpg">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>きろく — 私の日記</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500&family=Noto+Serif+JP:wght@300;400&display=swap');
@@ -615,18 +615,21 @@ async function saveEntry() {
   try {
     const datetimeVal = document.getElementById('entry-datetime').value;
     const entryDate = datetimeVal ? new Date(datetimeVal).toISOString() : new Date().toISOString();
+    const introspect = document.getElementById('introspect-text').value.trim();
     const entry = {
       id: Date.now(),
       date: entryDate,
       text,
       moods: [...selectedMoods],
       photos: currentPhotos.map(p => p.dataUrl),
+      introspect: introspect || '',
       analysis: null
     };
     await dbPut(entry);
     entries.unshift(entry);
     // フォームリセット
     document.getElementById('diary-text').value = '';
+    document.getElementById('introspect-text').value = '';
     currentPhotos = []; renderPreviews();
     resetMoods();
     setNow();
