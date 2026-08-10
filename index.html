@@ -747,7 +747,7 @@ async function importMarkdown(event) {
     const moodLine = lines.find(l => l.startsWith('**気分:**')) || '';
     const moods = [];
     for (const [label, emoji] of Object.entries(MOOD_MAP)) {
-      if (moodLine.includes(emoji) || moodLine.includes(label)) moods.push(emoji);
+      if (moodLine.includes(emoji) || moodLine.includes(label)) moods.push(emoji + ' ' + label);
     }
 
     // introspect行: > 💭 ...
