@@ -932,7 +932,13 @@ const MOOD_SCORES = {
 function moodScore(entry) {
   const moods = Array.isArray(entry.moods) ? entry.moods : (entry.mood ? [entry.mood] : []);
   if (!moods.length) return null;
-  return Math.round(moods.reduce((s, m) => s + (MOOD_SCORES[m] || 50), 0) / moods.length);
+  return Math.round(moods.reduce((s, m) => {
+    // 完全一致を試みる。なければ絵文字部分（先頭トークン）で前方一致検索
+    if (MOOD_SCORES[m] !== undefined) return s + MOOD_SCORES[m];
+    const emoji = m.split(' ')[0];
+    const key = Object.keys(MOOD_SCORES).find(k => k.startsWith(emoji));
+    return s + (key ? MOOD_SCORES[key] : 50);
+  }, 0) / moods.length);
 }
 
 // ====== CHARTS ======
