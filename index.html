@@ -929,6 +929,13 @@ const MOOD_SCORES = {
   '😔 つらい': 20, '😢 悲しい': 15, '😤 もやもや': 25, '😡 怒り': 10,
   '😰 不安': 20, '😴 眠い': 40, '😩 ぐったり': 25, '🤒 体調不良': 15
 };
+// 絵文字のみの古い形式→「絵文字 ラベル」形式に正規化
+function normalizeMood(m) {
+  if (MOOD_SCORES[m] !== undefined) return m; // すでに正しい形式
+  const emoji = m.split(' ')[0];
+  const key = Object.keys(MOOD_SCORES).find(k => k.startsWith(emoji));
+  return key || m;
+}
 function moodScore(entry) {
   const moods = Array.isArray(entry.moods) ? entry.moods : (entry.mood ? [entry.mood] : []);
   if (!moods.length) return null;
@@ -950,7 +957,10 @@ function renderLineChart() {
   canvas.width = canvas.offsetWidth; canvas.height = 220;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  const scored = [...entries].reverse().filter(e => moodScore(e) !== null).slice(0, 14);
+  const scored = [...entries]
+    .filter(e => moodScore(e) !== null)
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+    .slice(-14);
   if (scored.length < 2) {
     ctx.fillStyle = '#aaa'; ctx.font = '13px sans-serif'; ctx.textAlign = 'center';
     ctx.fillText('気分を選択した記録が2件以上になるとグラフが表示されます', canvas.width/2, 110); return;
