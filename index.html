@@ -980,14 +980,17 @@ function renderLineChart() {
   vals.forEach((v, i) => { const x = L + i * step, y = T + H - (v / 100 * H); i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); });
   ctx.stroke();
 
-  // ドットと日付
+  // ドットと日付（最大5件のみ表示）
+  const labelStep = Math.ceil(vals.length / 5);
   vals.forEach((v, i) => {
     const x = L + i * step, y = T + H - (v / 100 * H);
     ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2);
     ctx.fillStyle = '#7c6fcd'; ctx.fill();
-    const d = new Date(scored[i].date);
-    ctx.fillStyle = '#aaa'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText(`${d.getMonth()+1}/${d.getDate()}`, x, T + H + 16);
+    if (i % labelStep === 0 || i === vals.length - 1) {
+      const d = new Date(scored[i].date);
+      ctx.fillStyle = '#aaa'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(`${d.getMonth()+1}/${d.getDate()}`, x, T + H + 16);
+    }
   });
 }
 
@@ -1011,23 +1014,21 @@ function renderBarChart() {
   }
 
   const maxVal = sorted[0][1];
-  const barH = 24, gap = 8, L = 56, T = 10;
+  const barH = 24, gap = 8, L = 72, T = 10;
   const W = canvas.width - L - 16;
 
   sorted.forEach(([mood, count], i) => {
     const y = T + i * (barH + gap);
     const emoji = mood.split(' ')[0];
-    const label = mood.split(' ')[1] || '';
+    const label = mood.replace(emoji, '').trim();
     const score = MOOD_SCORES[mood] || 50;
     // ポジティブ度で色を変える
-    const hue = Math.round(score * 1.2); // 0(赤)〜100(緑)
+    const hue = Math.round(score * 1.2);
     const color = `hsl(${hue}, 60%, 55%)`;
 
-    // ラベル（絵文字＋テキスト）
-    ctx.font = '14px sans-serif'; ctx.textAlign = 'right'; ctx.fillStyle = '#555';
-    ctx.fillText(emoji, L - 24, y + barH - 6);
-    ctx.font = '10px Noto Sans JP, sans-serif'; ctx.fillStyle = '#888';
-    ctx.fillText(label, L - 4, y + barH - 6);
+    // ラベル（絵文字＋テキストを1行で描画）
+    ctx.font = '13px sans-serif'; ctx.textAlign = 'right'; ctx.fillStyle = '#555';
+    ctx.fillText(emoji + label, L - 4, y + barH - 6);
 
     // バー
     const barW = Math.round((count / maxVal) * W);
