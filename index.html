@@ -387,7 +387,7 @@
     </div>
     <div class="chart-section">
       <div class="chart-title">気分の記録ランキング</div>
-      <canvas id="emotion-radar" height="220"></canvas>
+      <div id="mood-ranking"></div>
     </div>
   </div>
 
@@ -1005,54 +1005,50 @@ function renderLineChart() {
 }
 
 function renderBarChart() {
-  const canvas = document.getElementById('emotion-radar');
-  const ctx = canvas.getContext('2d');
-  canvas.width = canvas.offsetWidth; canvas.height = 220;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const el = document.getElementById('mood-ranking');
+  if (!el) return;
 
-  // 全記録から気分を集計
+  // 全記録から気分を集計（古い絵文字のみ形式も正規化）
   const counts = {};
   entries.forEach(e => {
     const moods = Array.isArray(e.moods) ? e.moods : (e.mood ? [e.mood] : []);
-    moods.forEach(m => { counts[m] = (counts[m] || 0) + 1; });
+    moods.forEach(m => {
+      const key = normalizeMood(m);
+      counts[key] = (counts[key] || 0) + 1;
+    });
   });
   const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 7);
 
   if (!sorted.length) {
-    ctx.fillStyle = '#aaa'; ctx.font = '14px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText('記録がありません', canvas.width / 2, 110); return;
+    el.innerHTML = '<div style="text-align:center;color:#aaa;padding:40px 0;font-size:14px;">記録がありません</div>';
+    return;
   }
 
   const maxVal = sorted[0][1];
-  const barH = 24, gap = 8, L = 72, T = 10;
-  const W = canvas.width - L - 16;
 
-  sorted.forEach(([mood, count], i) => {
-    const y = T + i * (barH + gap);
-    const emoji = mood.split(' ')[0];
-    const label = mood.replace(emoji, '').trim();
-    const score = MOOD_SCORES[mood] || 50;
-    // ポジティブ度で色を変える
-    const hue = Math.round(score * 1.2);
-    const color = `hsl(${hue}, 60%, 55%)`;
-
-    // ラベル（絵文字＋テキストを1行で描画）
-    ctx.font = '13px sans-serif'; ctx.textAlign = 'right'; ctx.fillStyle = '#555';
-    ctx.fillText(emoji + label, L - 4, y + barH - 6);
-
-    // バー
-    const barW = Math.round((count / maxVal) * W);
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.roundRect ? ctx.roundRect(L, y, barW, barH, 4) : ctx.rect(L, y, barW, barH);
-    ctx.fill();
-
-    // カウント
-    ctx.font = 'bold 11px sans-serif'; ctx.fillStyle = '#fff'; ctx.textAlign = 'left';
-    if (barW > 24) ctx.fillText(count + '回', L + 6, y + barH - 7);
-    else { ctx.fillStyle = '#888'; ctx.fillText(count + '回', L + barW + 4, y + barH - 7); }
-  });
+  el.innerHTML = `<div style="background:#fff;border-radius:12px;box-shadow:0 2px 12px var(--shadow);padding:16px;">` +
+    sorted.map(([mood, count]) => {
+      const parts = mood.split(' ');
+      const emoji = parts[0];
+      const label = parts.slice(1).join(' ');
+      const score = MOOD_SCORES[mood] !== undefined ? MOOD_SCORES[mood] : 50;
+      const hue = Math.round(score * 1.2);
+      const color = `hsl(${hue}, 60%, 55%)`;
+      const pct = Math.round((count / maxVal) * 100);
+      return `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <div style="flex:0 0 84px;font-size:13px;color:#555;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+            <span style="font-size:15px;">${emoji}</span> ${label}
+          </div>
+          <div style="flex:1;background:#f0f0f0;border-radius:5px;height:24px;position:relative;overflow:hidden;">
+            <div style="width:${pct}%;background:${color};height:100%;border-radius:5px;"></div>
+            <span style="position:absolute;left:6px;top:0;line-height:24px;font-size:11px;font-weight:bold;color:${pct > 18 ? '#fff' : '#888'};${pct > 18 ? '' : `left:${pct}%;margin-left:6px;`}">${count}回</span>
+          </div>
+        </div>`;
+    }).join('') + `</div>`;
+  return;
 }
+
 
 // ====== UTILS ======
 function formatDate(d) {
